@@ -6,6 +6,17 @@ pub fn FSNode(comptime T: type, max_name_length: usize) type {
         /// Hashmap key & value type
         pub const HashMapKeyVal = *[]const u8;
 
+        /// Hashmap context type
+        const HashmapContext = struct {
+            pub fn hash(self: @This(), k: HashMapKeyVal) u64 {
+                return std.hash_map.hashString(k.*);
+            }
+
+            pub fn eql(self: @This(), k1: HashMapKeyVal, k2: HashMapKeyVal) bool {
+                return std.mem.eql(u8, k1.*, k2.*);
+            }
+        };
+
         /// Node data
         ref: T = .{},
         /// Name buffer
@@ -13,15 +24,7 @@ pub fn FSNode(comptime T: type, max_name_length: usize) type {
         /// Node name. Always points to name_buf
         name: []const u8 = undefined,
         /// Node children
-        children: std.HashMapUnmanaged(HashMapKeyVal, HashMapKeyVal, struct {
-            pub fn hashFn(k: HashMapKeyVal) u64 {
-                return std.hash_map.hashString(k.*);
-            }
-        }.hashFn, struct {
-            pub fn eqlFn(k1: HashMapKeyVal, k2: HashMapKeyVal) bool {
-                return std.mem.eql(u8, k1.*, k2.*);
-            }
-        }.eqlFn, 80) = .{},
+        children: std.HashMapUnmanaged(HashMapKeyVal, HashMapKeyVal, HashmapContext, 80) = .{},
         /// Node parent
         parent: ?*@This() = null,
         /// Mount pointer. Points to root dentry of mounted fs if not null
@@ -92,7 +95,7 @@ pub fn FSNode(comptime T: type, max_name_length: usize) type {
             if (std.debug.runtime_safety) {
                 child.parent = null;
             }
-            std.debug.assert(self.children.remove(child.key()) != null);
+            std.debug.assert(self.children.remove(child.key()));
             child.reachable_from_root = false;
         }
 
@@ -167,22 +170,22 @@ test "Basic FSNode operations" {
     try devRoot.addChild(block, std.testing.allocator);
     dev.addMount(devRoot);
 
-    std.testing.expectEqual(root.getChild("dev").?.getChild("block").?.ref.ino, 6);
-    std.testing.expectEqual(root.getChild("usr"), null);
-    std.testing.expectEqual(root.getChild("home").?.getChild("anon").?.ref.ino, 3);
-    std.testing.expectEqual(block.getParent().?.getParent().?.ref.ino, 1);
+    try std.testing.expectEqual(root.getChild("dev").?.getChild("block").?.ref.ino, 6);
+    try std.testing.expectEqual(root.getChild("usr"), null);
+    try std.testing.expectEqual(root.getChild("home").?.getChild("anon").?.ref.ino, 3);
+    try std.testing.expectEqual(block.getParent().?.getParent().?.ref.ino, 1);
 
     // Mount fs on top of home
     const tmpHomeRoot = try makeDEntry("", 8);
     const anon2 = try makeDEntry("anon", 9);
     try tmpHomeRoot.addChild(anon2, std.testing.allocator);
     home.addMount(tmpHomeRoot);
-    std.testing.expectEqual(root.getChild("home").?.getChild("anon").?.ref.ino, 9);
-    std.testing.expectEqual(home.removeMount(), tmpHomeRoot);
-    std.testing.expectEqual(root.getChild("home").?.getChild("anon").?.ref.ino, 3);
+    try std.testing.expectEqual(root.getChild("home").?.getChild("anon").?.ref.ino, 9);
+    try std.testing.expectEqual(home.removeMount(), tmpHomeRoot);
+    try std.testing.expectEqual(root.getChild("home").?.getChild("anon").?.ref.ino, 3);
 
     root.removeChild(home);
-    std.testing.expectEqual(root.getChild("usr"), null);
+    try std.testing.expectEqual(root.getChild("usr"), null);
 
     root.destroy(std.testing.allocator);
     home.destroy(std.testing.allocator);

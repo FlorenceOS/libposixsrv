@@ -450,13 +450,13 @@ test "walking" {
         const Held = struct {
             owner: *Self,
             fn release(self: *@This()) void {
-                std.testing.expect(self.owner.acquired);
+                std.debug.assert(self.owner.acquired);
                 self.owner.acquired = false;
             }
         };
         acquired: bool = false,
         fn acquire(self: *@This()) Held {
-            std.testing.expect(!self.acquired);
+            std.debug.assert(!self.acquired);
             self.acquired = true;
             return .{ .owner = self };
         }
@@ -488,40 +488,40 @@ test "walking" {
     const usrbin = try tree.walk(null, null, "/usr/bin", true);
     // All paths starting from / resolve from root, even if cwd is supplied
     const relativeUsrBin = try tree.walk(usrbin, null, "/usr/bin", true);
-    std.testing.expectEqual(usrbin, relativeUsrBin);
+    try std.testing.expectEqual(usrbin, relativeUsrBin);
     tree.dropRef(relativeUsrBin);
     // Try to open /usr/bin/posixsrv in two possible ways
     const posix = try tree.walk(usrbin, null, "posixsrv", true);
     const posixFromAbsolute = try tree.walk(null, null, "/../usr/bin/posixsrv", false);
-    std.testing.expectEqual(posix, posixFromAbsolute);
+    try std.testing.expectEqual(posix, posixFromAbsolute);
     // Test path function
     const emitted = try tree.emitPath(posix, null, &path_buf);
-    std.testing.expect(std.mem.eql(u8, emitted, "/usr/bin/posixsrv"));
+    try std.testing.expect(std.mem.eql(u8, emitted, "/usr/bin/posixsrv"));
     // Drop nodes
     tree.dropRef(posix);
     tree.dropRef(posixFromAbsolute);
     tree.dropRef(usrbin);
     // Load posixsrv back to test loading from cache
     const posixFromAbsolute2 = try tree.walk(null, null, "/usr/bin/posixsrv", true);
-    std.testing.expectEqual(posixFromAbsolute, posixFromAbsolute2);
+    try std.testing.expectEqual(posixFromAbsolute, posixFromAbsolute2);
     tree.dropRef(posixFromAbsolute2);
     // Try resolving file that does not exist
     if (tree.walk(null, null, "/home/invisible/???", false)) {
         @panic("/home/invisible/??? file should not exist");
     } else |err| {
-        std.testing.expectEqual(err, error.NotFound);
+        try std.testing.expectEqual(err, error.NotFound);
     }
     // Let's make chroot jail!
     const jail = try tree.walk(null, null, "/jail", true);
     // Now let's try to escape it
     const escape_attempt = try tree.walk(null, jail, "/../../../", false);
     // We shall not pass
-    std.testing.expectEqual(jail, escape_attempt);
+    try std.testing.expectEqual(jail, escape_attempt);
     tree.dropRef(escape_attempt);
     // Test path rendering in chrooted environment
     const test_node = try tree.walk(null, jail, "/nopass/test_node", true);
     const emitted2 = try tree.emitPath(test_node, jail, &path_buf);
-    std.testing.expect(std.mem.eql(u8, emitted2, "/nopass/test_node"));
+    try std.testing.expect(std.mem.eql(u8, emitted2, "/nopass/test_node"));
     tree.dropRef(test_node);
     tree.dropRef(jail);
     // Test credentials verification
@@ -530,7 +530,7 @@ test "walking" {
     if (tree.walk(null, null, "/etc/nopass/init", false)) {
         @panic("We should not be allowed to access /etc/nopass/init");
     } else |err| {
-        std.testing.expectEqual(err, error.PermissionDenied);
+        try std.testing.expectEqual(err, error.PermissionDenied);
     }
     tree.deinit();
 }
